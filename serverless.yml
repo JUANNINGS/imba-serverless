@@ -1,0 +1,268 @@
+service: my-first-project
+
+frameworkVersion: '2 || 3'
+
+plugins:
+  - serverless-python-requirements
+  - serverless-dotenv-plugin
+  - serverless-prune-plugin
+  - serverless-iam-roles-per-function
+  - serverless-step-functions
+
+provider:
+  name: aws
+  runtime: python3.8
+  # lambdaHashingVersion: 20201221
+  memorySize: 256
+  timeout: 300
+  deploymentBucket:   
+    name: johnny-serverless-deployment
+    maxPreviousDeploymentArtifacts: 3   
+  stage: dev
+  region: ap-southeast-2
+  iam:
+    role:
+      statements:
+      - Effect: "Allow"        
+        Action:
+          - s3:*
+          - athena:*
+          - glue:*    
+        Resource: 
+          - "*"
+
+
+stepFunctions:
+  stateMachines:
+    myStateMachine:
+      name: Serverless_GP_StateMachine
+      definition:
+        Comment: Step function to run imba process
+        StartAt: serverless-remove_feature_files
+        States:
+          serverless-remove_feature_files:
+            Type: Task
+            Resource: !GetAtt remove_feature_files.Arn
+            ResultPath: $.serverless-remove_feature_files
+            Next: serverless-exe_query_order_products_prior
+            TimeoutSeconds: 60
+          serverless-exe_query_order_products_prior:
+            Type: Task
+            Resource: !GetAtt exe_query_order_products_prior.Arn
+            ResultPath: $.serverless-exe_query_order_products_prior
+            Next: serverless-exe_query_user_features_1
+            TimeoutSeconds: 60
+          serverless-exe_query_user_features_1:
+            Type: Task
+            Resource: !GetAtt exe_query_user_features_1.Arn
+            ResultPath: $.serverless-exe_query_user_features_1
+            Next: serverless-exe_query_user_features_2
+            TimeoutSeconds: 60
+          serverless-exe_query_user_features_2:
+            Type: Task
+            Resource: !GetAtt exe_query_user_features_2.Arn
+            ResultPath: $.serverless-exe_query_user_features_2
+            Next: serverless-exe_query_up_features
+            TimeoutSeconds: 60
+          serverless-exe_query_up_features:
+            Type: Task
+            Resource: !GetAtt exe_query_up_features.Arn
+            ResultPath: $.serverless-exe_query_up_features
+            Next: serverless-exe_query_prd_features
+            TimeoutSeconds: 60
+          serverless-exe_query_prd_features:
+            Type: Task
+            Resource: !GetAtt exe_query_prd_features.Arn
+            ResultPath: $.serverless-exe_query_prd_features
+            Next: serverless-exe_query_glue_job
+            TimeoutSeconds: 60
+          serverless-exe_query_glue_job:
+            Type: Task
+            Resource: !GetAtt exe_query_glue_job.Arn
+            ResultPath: $.serverless-exe_query_glue_job
+            TimeoutSeconds: 60
+            End: true
+
+
+functions:
+  crawler_from_s3:
+    handler: crawler_from_s3.run
+    name: serverless-crawler_from_s3
+    memorySize: 256
+    timeout: 300
+  
+  remove_feature_files:
+    handler: remove_feature_files.run
+    name: serverless-remove_feature_files
+    memorySize: 256
+    timeout: 300
+
+  exe_query_order_products_prior:
+    handler: exe_query_order_products_prior.run
+    name: serverless-exe_query_order_products_prior
+    memorySize: 256
+    timeout: 300
+
+  exe_query_user_features_1:
+    handler: exe_query_user_features_1.run
+    name: serverless-exe_query_user_features_1
+    memorySize: 256
+    timeout: 300
+  
+  exe_query_user_features_2:
+    handler: exe_query_user_features_2.run
+    name: serverless-exe_query_user_features_2
+    memorySize: 256
+    timeout: 300
+
+  exe_query_up_features:
+    handler: exe_query_up_features.run
+    name: serverless-exe_query_up_features
+    memorySize: 256
+    timeout: 300
+
+  exe_query_prd_features:
+    handler: exe_query_prd_features.run
+    name: serverless-exe_query_prd_features
+    memorySize: 256
+    timeout: 300
+  
+  exe_query_glue_job:
+    handler: exe_query_glue_job.run
+    name: serverless-exe_query_glue_job
+    memorySize: 256
+    timeout: 300
+
+  start_step_functions:
+    handler: start_step_functions.run
+    name: serverless-start_step_functions
+    memorySize: 256
+    timeout: 300
+    iamRoleStatementsName: step-functions-role
+    iamRoleStatements:
+      - Effect: "Allow"        
+        Action:
+          - states:*    
+        Resource: "*"
+    events:
+      - cloudwatchEvent:
+          event:
+            source:
+              - 'aws.glue'
+            detail-type:
+              - 'Glue Crawler State Change'
+            detail:
+              state:
+                - Succeeded
+              crawlerName:
+                - serverless-crawler-johnny
+
+resources:
+  Description: IMBA data pipeline defination
+  Resources:
+    CrawlerRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            -
+              Effect: "Allow"
+              Principal:
+                Service:
+                  - "glue.amazonaws.com"
+              Action:
+                - "sts:AssumeRole"
+        Path: "/"
+        Policies:
+          -
+            PolicyName: "CrawlerETLPolicy"
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                -
+                  Effect: "Allow"
+                  Action: 
+                    - "s3:GetObject"
+                    - "s3:PutObject"
+                    - s3:*
+                    - glue:* 
+                    - logs:*
+                  Resource: "*"
+  
+    MyDatabase:
+      Type: AWS::Glue::Database
+      Properties:
+        CatalogId: !Ref AWS::AccountId
+        DatabaseInput:
+          Name: "serverless-prod"
+          Description: "Original-dataset"
+  
+    MyCrawler:
+      Type: AWS::Glue::Crawler
+      Properties:
+        Name: "serverless-crawler-johnny"
+        Role: !GetAtt CrawlerRole.Arn
+        DatabaseName: !Ref MyDatabase
+        Targets:
+          S3Targets:
+            - Path: "s3://imba-johnny/data"
+        SchemaChangePolicy:
+          UpdateBehavior: "UPDATE_IN_DATABASE"
+          DeleteBehavior: "DEPRECATE_IN_DATABASE"
+
+    GlueJobRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            -
+              Effect: "Allow"
+              Principal:
+                Service:
+                  - "glue.amazonaws.com"
+              Action:
+                - "sts:AssumeRole"
+        Path: "/"
+        Policies:
+          -
+            PolicyName: "glueJobRunPolicy"
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                -
+                  Effect: "Allow"
+                  Action: 
+                    - "s3:GetObject"
+                    - "s3:PutObject"
+                    - s3:*
+                    - glue:* 
+                    - logs:*
+                  Resource: "*"
+ 
+    GlueJob:
+      Type: AWS::Glue::Job
+      Properties:
+        Command:
+          Name: glueetl
+          PythonVersion: '3'
+          ScriptLocation: "s3://imba-johnny/scripts/glue_job.py"
+        DefaultArguments:
+          "--job-bookmark-option": "job-bookmark-enable"
+        ExecutionProperty:
+          MaxConcurrentRuns: 1
+        MaxRetries: 0
+        Name: serverless-imba-glue
+        Role: !Ref GlueJobRole
+        GlueVersion: '2.0'
+        WorkerType: G.1X
+        NumberOfWorkers: 10
+    
+    
+
+
+  # "bucket": "imba-johnny", 
+  # "prefix": "features/",
+	# "database": "prod",
+	# "query_output": "s3://imba-johnny/query_results/"
