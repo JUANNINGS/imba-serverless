@@ -5,7 +5,7 @@ import os
 
 stepFunctions_client = boto3.client('stepfunctions')
 
-region = os.environ["region"]
+region = os.environ["REGION"]
 account_id = os.environ["account_id"]
 step_functions_name = os.environ["stepfunctions_name"]
 

@@ -22,11 +22,11 @@ lib64/
 parts/
 sdist/
 var/
-<<<<<<< HEAD
 *.egg-info/
 .installed.cfg
 *.egg
 node_modules/
+.serverless/
 .js
 .json
 
@@ -34,7 +34,6 @@ node_modules/
 .serverless
 .env
 .DS_Store
-=======
 wheels/
 pip-wheel-metadata/
 share/python-wheels/
@@ -143,4 +142,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
->>>>>>> cdaaac33dc31ea0acca31d0c4f06c897ec402541

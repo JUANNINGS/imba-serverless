@@ -1,4 +1,4 @@
-service: my-first-project
+service: johnny-imba-project
 
 frameworkVersion: '2 || 3'
 
@@ -9,6 +9,8 @@ plugins:
   - serverless-iam-roles-per-function
   - serverless-step-functions
 
+useDotenv: true
+
 provider:
   name: aws
   runtime: python3.8
@@ -16,10 +18,10 @@ provider:
   memorySize: 256
   timeout: 300
   deploymentBucket:   
-    name: johnny-serverless-deployment
+    name: ${env:DEPLOY_BUCKET}
     maxPreviousDeploymentArtifacts: 3   
   stage: dev
-  region: ap-southeast-2
+  region: ${env:REGION}
   iam:
     role:
       statements:
@@ -206,7 +208,7 @@ resources:
         DatabaseName: !Ref MyDatabase
         Targets:
           S3Targets:
-            - Path: "s3://imba-johnny/data"
+            - Path: "s3://${env:DATE_PATH}"
         SchemaChangePolicy:
           UpdateBehavior: "UPDATE_IN_DATABASE"
           DeleteBehavior: "DEPRECATE_IN_DATABASE"
@@ -247,7 +249,7 @@ resources:
         Command:
           Name: glueetl
           PythonVersion: '3'
-          ScriptLocation: "s3://imba-johnny/scripts/glue_job.py"
+          ScriptLocation: "s3://${env:SCRIPTS_PATH}glue_job_partition_date.py"
         DefaultArguments:
           "--job-bookmark-option": "job-bookmark-enable"
         ExecutionProperty:
@@ -259,10 +261,3 @@ resources:
         WorkerType: G.1X
         NumberOfWorkers: 10
     
-    
-
-
-  # "bucket": "imba-johnny", 
-  # "prefix": "features/",
-	# "database": "prod",
-	# "query_output": "s3://imba-johnny/query_results/"
